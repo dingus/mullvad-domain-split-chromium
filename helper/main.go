@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -25,7 +27,19 @@ import (
 const (
 	proxyAddress  = "127.0.0.1:37651"
 	healthAddress = "127.0.0.1:37652"
+	helperVersion = "1.0.1"
 )
+
+var systemLookupIPAddr = net.DefaultResolver.LookupIPAddr
+var encryptedLookupIPAddr = lookupDoH
+
+type dohResponse struct {
+	Status int `json:"Status"`
+	Answer []struct {
+		Type int    `json:"type"`
+		Data string `json:"data"`
+	} `json:"Answer"`
+}
 
 func main() {
 	check := flag.Bool("check", false, "show whether helper is running")
@@ -53,7 +67,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Cache-Control", "no-store")
-		json.NewEncoder(w).Encode(map[string]interface{}{"running": true, "service": "Mullvad Home IP Helper", "proxy": "SOCKS5 127.0.0.1:37651", "version": "1.0.0"})
+		json.NewEncoder(w).Encode(map[string]interface{}{"running": true, "service": "Mullvad Home IP Helper", "proxy": "SOCKS5 127.0.0.1:37651", "version": helperVersion})
 	})}
 	// Abort startup if the health port isn't available; do not leave half-functioning helper.
 	hl, err := net.Listen("tcp4", healthAddress)
@@ -167,9 +181,9 @@ func serveSocks(conn net.Conn) {
 	}
 	// Resolve through this helper process, not the Chromium process. Explicitly
 	// refuse nonpublic destination addresses (including LAN and loopback).
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 14*time.Second)
 	defer cancel()
-	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	ips, err := resolveHost(ctx, host)
 	if err != nil {
 		reply(conn, 4)
 		return
@@ -220,6 +234,109 @@ func serveSocks(conn net.Conn) {
 	go pipe(conn, remote)
 	wg.Wait()
 }
+
+func resolveHost(ctx context.Context, host string) ([]net.IPAddr, error) {
+	systemCtx, cancelSystem := context.WithTimeout(ctx, 3*time.Second)
+	ips, systemErr := systemLookupIPAddr(systemCtx, host)
+	cancelSystem()
+	if systemErr == nil && len(ips) > 0 {
+		return ips, nil
+	}
+	if systemErr == nil {
+		systemErr = errors.New("system DNS returned no IP addresses")
+	}
+
+	// An excluded process can lose access to a VPN-provided DNS server even
+	// though its normal Internet route works. Fall back to encrypted DNS by
+	// connecting to Cloudflare's resolver IPs directly, avoiding a recursive
+	// dependency on the broken system resolver.
+	ips, dohErr := encryptedLookupIPAddr(ctx, host)
+	if dohErr != nil {
+		return nil, fmt.Errorf("system DNS failed: %v; encrypted DNS fallback failed: %w", systemErr, dohErr)
+	}
+	log.Printf("system DNS failed for %q; used encrypted DNS fallback", host)
+	return ips, nil
+}
+
+func lookupDoH(ctx context.Context, host string) ([]net.IPAddr, error) {
+	dialer := &net.Dialer{Timeout: 4 * time.Second, KeepAlive: 30 * time.Second}
+	transport := &http.Transport{
+		Proxy: nil,
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ServerName: "cloudflare-dns.com",
+		},
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var lastErr error
+			for _, address := range []string{"1.1.1.1:443", "1.0.0.1:443"} {
+				conn, err := dialer.DialContext(ctx, "tcp", address)
+				if err == nil {
+					return conn, nil
+				}
+				lastErr = err
+			}
+			return nil, lastErr
+		},
+	}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport}
+
+	var addresses []net.IPAddr
+	var lastErr error
+	for _, recordType := range []string{"A", "AAAA"} {
+		endpoint := "https://cloudflare-dns.com/dns-query?name=" + url.QueryEscape(host) + "&type=" + recordType
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+		request.Header.Set("Accept", "application/dns-json")
+		response, err := client.Do(request)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if response.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("DoH returned HTTP %d", response.StatusCode)
+			response.Body.Close()
+			continue
+		}
+		resolved, err := decodeDoHResponse(io.LimitReader(response.Body, 64<<10))
+		response.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		addresses = append(addresses, resolved...)
+	}
+	if len(addresses) > 0 {
+		return addresses, nil
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, errors.New("encrypted DNS returned no IP addresses")
+}
+
+func decodeDoHResponse(r io.Reader) ([]net.IPAddr, error) {
+	var payload dohResponse
+	if err := json.NewDecoder(r).Decode(&payload); err != nil {
+		return nil, err
+	}
+	if payload.Status != 0 {
+		return nil, fmt.Errorf("DNS response status %d", payload.Status)
+	}
+	var addresses []net.IPAddr
+	for _, answer := range payload.Answer {
+		if answer.Type != 1 && answer.Type != 28 {
+			continue
+		}
+		if ip := net.ParseIP(answer.Data); ip != nil {
+			addresses = append(addresses, net.IPAddr{IP: ip})
+		}
+	}
+	return addresses, nil
+}
+
 func isPublic(ip net.IP) bool {
 	if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
 		return false

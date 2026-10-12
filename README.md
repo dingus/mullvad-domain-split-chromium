@@ -96,6 +96,7 @@ This removes auto-start and the Mullvad exclusion but leaves installed files in 
 
 - The helper is intentionally bound only to `127.0.0.1`. It has no authentication, so any local process can use it while it is running.
 - It permits SOCKS5 TCP `CONNECT` only, refuses UDP and BIND, rejects private/loopback/special-use destinations, and resolves hostnames inside the excluded helper process.
+- If Windows DNS fails inside the excluded helper, it falls back to Cloudflare DNS over HTTPS by connecting directly to `1.1.1.1` or `1.0.0.1`. This avoids VPN-DNS reachability failures but discloses those failed hostname lookups to Cloudflare.
 - Home-routed sites see the normal ISP/home IP. The helper must be excluded from Mullvad for this to work.
 - PAC proxying primarily controls web requests. DNS prefetch, WebRTC, QUIC/UDP, browser background traffic, and extension traffic may behave differently. Test for IP, DNS, and WebRTC leaks.
 - A page can load third-party sign-in, CDN, analytics, or media hostnames. Those hostnames follow their own rules and may use different public IPs.
