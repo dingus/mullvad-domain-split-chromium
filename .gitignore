@@ -1,0 +1,10 @@
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local build output
+helper/MullvadHomeIPHelper-dev.exe
+*.log
+

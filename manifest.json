@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Mullvad Domain Split (Chromium, Unofficial)",
+  "version": "0.9.11",
+  "description": "Experimental Mullvad Chromium proxy port with per-domain home-IP bypass using an excluded local helper.",
+  "action": {
+    "default_icon": {
+      "16": "assets/icons/icon16.png",
+      "32": "assets/icons/icon32.png",
+      "48": "assets/icons/icon48.png"
+    },
+    "default_popup": "dist/popup/index.html",
+    "default_title": "Mullvad Browser Extension (Chromium Port)"
+  },
+  "options_ui": {
+    "page": "dist/options/index.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "assets/icons/icon16.png",
+    "32": "assets/icons/icon32.png",
+    "48": "assets/icons/icon48.png",
+    "128": "assets/icons/default.png"
+  },
+  "permissions": [
+    "management",
+    "privacy",
+    "storage",
+    "tabs",
+    "proxy"
+  ],
+  "host_permissions": [
+    "https://*.mullvad.net/*",
+    "http://127.0.0.1/*"
+  ],
+  "incognito": "spanning"
+}

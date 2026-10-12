@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Domain routing — Mullvad Chromium</title>
+<link rel="stylesheet" href="route.css">
+<script src="route.js" defer></script>
+</head>
+<body>
+<main>
+<header><div><span class="eyebrow">MULLVAD CHROMIUM · UNOFFICIAL</span><h1>Domain routing</h1><p>Choose which sites use your <strong>home IP</strong> and which use <strong>Mullvad</strong>.</p></div><img alt="Mullvad logo" src="../assets/mullvad-logo.svg"></header>
+<section class="warning"><strong>Before you start:</strong> Keep the Mullvad Windows VPN <b>connected</b>. Exclude <code>MullvadHomeIPHelper.exe</code> from the Mullvad app's <b>Split tunneling</b> list. <b>Do not exclude Chrome, Brave, or Edge.</b> Your home IP will be visible to any sites routed through the helper.</section>
+<section class="card">
+<div class="line"><div><h2>Home-IP helper</h2><p>The helper forwards browser traffic using its own Windows network route.</p></div><span id="helper-status" class="status">Checking…</span></div>
+<div class="line"><span class="small">SOCKS5 <code>127.0.0.1:37651</code></span><button id="check-helper" class="secondary" type="button">Check helper</button></div>
+<p class="small" id="helper-msg">Seeing “running” means only that the helper is open. Confirm the IP with <code>TEST-HOME-IP.bat</code>.</p>
+</section>
+<section class="card">
+<div class="switchline"><div><h2>Enable domain routing</h2><p>When off, the original Mullvad proxy settings remain unchanged.</p></div><label class="toggle"><input type="checkbox" id="enabled"><span>On</span></label></div>
+<div class="field"><label for="mode">Default route for websites</label><select id="mode"><option value="vpn">VPN tunnel (no browser proxy)</option><option value="home">Home IP (through helper)</option></select><p class="small">"VPN tunnel" uses your Mullvad desktop app's connection. "Home IP" uses the excluded helper. Existing explicitly configured Mullvad SOCKS5 domain rules remain active when using Home IP as the default.</p></div>
+<div class="two-col">
+<div class="field"><label for="home-domains">Always use Home IP</label><textarea id="home-domains" rows="6" placeholder="bank.com&#10;example.org"></textarea><p class="small">One domain per line, including subdomains. Overrides original Mullvad proxy rules for these domains.</p></div>
+<div class="field"><label for="vpn-domains">Always use Mullvad VPN tunnel</label><textarea id="vpn-domains" rows="6" placeholder="social.example&#10;forum.example"></textarea><p class="small">One domain per line, including subdomains. Uses the desktop VPN tunnel, not a selected SOCKS5 server. For selected SOCKS5 locations, configure the domain in the original Mullvad popup.</p></div>
+</div>
+<div id="error" class="error" role="alert"></div><div class="actions"><button type="button" id="save">Save routing</button><span id="saved" aria-live="polite"></span></div>
+</section>
+<section class="card"><h2>What takes priority?</h2><p class="small">Local/private addresses → Always Home IP → Always Mullvad VPN tunnel → original proxy exclusions → original per-domain Mullvad SOCKS5 locations → selected default. A selected Home IP default overrides original global/random proxies. A "Direct" browser route is still inside Mullvad unless that program is excluded in Windows.</p></section>
+<section class="foot"><a href="../dist/options/index.html">Original Mullvad settings</a><span>Not developed or supported by Mullvad. Test both IP routes before relying on this for privacy.</span></section>
+</main>
+</body></html>
