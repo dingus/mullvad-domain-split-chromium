@@ -27,7 +27,7 @@ import (
 const (
 	proxyAddress  = "127.0.0.1:37651"
 	healthAddress = "127.0.0.1:37652"
-	helperVersion = "1.0.1"
+	helperVersion = "0.9.10"
 )
 
 var systemLookupIPAddr = net.DefaultResolver.LookupIPAddr

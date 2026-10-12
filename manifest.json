@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mullvad Domain Split (Chromium, Unofficial)",
-  "version": "0.9.11",
+  "version": "0.9.10",
   "description": "Experimental Mullvad Chromium proxy port with per-domain home-IP bypass using an excluded local helper.",
   "action": {
     "default_icon": {
